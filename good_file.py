@@ -244,11 +244,19 @@ class MainController(QWidget):
                 dist_list_cm = []
                 for x in parts:
                     try:
-                        dist_list_cm.append(float(x)/10.0)
+                        dist_list_cm.append(float(x) / 10.0)
                     except:
                         dist_list_cm.append(None)
 
+                # ★ 현재 샘플의 회전 각도 (도 단위)
+                #   첫 샘플(C=0)은 0도, 다음은 SC, 그 다음은 2*SC, ...
+                current_angle = self.C * self.SC
+                self.graph_win.az_center = current_angle
+
+                # ★ 현재 각도 기준으로 8x8 데이터를 3D 좌표로 변환 + 누적 플롯
                 self.graph_win.update_plot(dist_list_cm)
+
+                # 8x8 텍스트 창 업데이트
                 self.distance_win.update_distances(dist_list_cm)
 
                 self.C += 1
