@@ -2,7 +2,8 @@ import sys
 import math
 import serial
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QGridLayout
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QLineEdit, QPushButton, QGridLayout
 )
 from PyQt5.QtCore import QTimer
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -22,33 +23,29 @@ class GraphWindow(QWidget):
         self.fig = Figure(figsize=(6, 4))
         self.canvas = FigureCanvas(self.fig)
         self.ax = self.fig.add_subplot(111, projection='3d')
+
         layout = QVBoxLayout()
         layout.addWidget(self.canvas)
         self.setLayout(layout)
 
-        self.az_center = 0.0                      # 센서 중앙 방위각(터릿 회전 각도)
+        self.az_center = 0.0
         self.elevs = [30, 15, 0, -15, -30, -45, -60, -75]
-
-        # ★ 누적 포인트 저장용 리스트
-        self.all_points = []
-
+        self.all_points = []  # 누적 포인트
         self.reset_axis()
 
     def reset_axis(self):
         self.ax.cla()
-        # 거리 단위가 cm라서 대충 -200~200 정도로 잡음 (원하면 조절 가능)
-        self.ax.set_xlim(-50, 50)
-        self.ax.set_ylim(-50, 50)
-        self.ax.set_zlim(-50, 50)
+        self.ax.set_xlim(-20, 20)
+        self.ax.set_ylim(-20, 20)
+        self.ax.set_zlim(-20, 20)
         self.ax.set_xlabel("X (cm)")
         self.ax.set_ylabel("Y (cm)")
         self.ax.set_zlabel("Z (cm)")
         self.ax.view_init(elev=20, azim=-60)
-        # 3D 비율 맞추기 (정육면체 비율)
         try:
             self.ax.set_box_aspect((1, 1, 1))
         except:
-            pass  # 오래된 matplotlib이면 없어도 동작하게
+            pass
 
     def update_plot(self, dist_list_cm):
         if len(dist_list_cm) != GRID_SIZE**2:
@@ -59,35 +56,36 @@ class GraphWindow(QWidget):
                  for i in range(GRID_SIZE)]
 
         new_pts = []
-
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):
                 dist = dist_list_cm[r * GRID_SIZE + c]
                 if dist is None or dist <= 0:
                     continue
-
                 az = math.radians(azims[c])
                 el = math.radians(self.elevs[r])
-
-                # 전방(y축), 오른쪽(x축), 위(z축) 기준 좌표
                 x = dist * math.sin(az) * math.cos(el)
                 y = dist * math.cos(az) * math.cos(el)
                 z = dist * math.sin(el)
-
                 new_pts.append((x, y, z))
 
         if not new_pts:
             return
 
-        # ★ 이번 프레임에서 계산된 포인트들을 누적 리스트에 추가
         self.all_points.extend(new_pts)
-
-        # ★ 축 초기화 후, 누적된 모든 포인트를 다시 그림
         self.reset_axis()
 
         xs, ys, zs = zip(*self.all_points)
-        self.ax.scatter(xs, ys, zs, c='red', s=5)      # 누적 거리 포인트
-        self.ax.scatter([0], [0], [0], c='blue', s=30) # 센서 위치
+        self.ax.scatter(xs, ys, zs, c='red', s=2)  # 점 색상/크기 변경
+        self.ax.scatter([0], [0], [0], c='blue', s=30)  # 센서 위치
+
+        # 시야축(FOV 중앙 방향) 표시
+        fov_length = 60
+        az = math.radians(self.az_center)
+        el = math.radians(0)
+        x = fov_length * math.sin(az) * math.cos(el)
+        y = fov_length * math.cos(az) * math.cos(el)
+        z = fov_length * math.sin(el)
+        self.ax.plot([0, x], [0, y], [0, z], c='red', linewidth=2)
 
         self.canvas.draw()
 
@@ -99,7 +97,7 @@ class DistanceWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("8x8 Distance Array (cm)")
-        self.setGeometry(200, 200, 400, 400)
+        self.setGeometry(0, 0, 400, 400)
         layout = QGridLayout()
         self.labels = [[QLabel("0.0") for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
         for r in range(GRID_SIZE):
@@ -115,6 +113,7 @@ class DistanceWindow(QWidget):
                 self.labels[r][c].setText("∞")
             else:
                 self.labels[r][c].setText(f"{val:.2f}")
+
 
 # ============================================================
 # UART 수신/송신
@@ -138,53 +137,67 @@ class UARTReceiver:
         except:
             pass
 
+
 # ============================================================
 # 메인 컨트롤러
 # ============================================================
 class MainController(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("UART Controller with S Input")
-        self.setGeometry(850, 200, 250, 180)
+        self.setWindowTitle("UART Controller")
+        self.setGeometry(850, 200, 400, 200)
 
-        layout = QVBoxLayout()
+        main_layout = QVBoxLayout()
+        input_layout = QHBoxLayout()
 
-        # S 입력 UI
+        # S 입력
         self.s_input = QLineEdit()
         self.s_input.setPlaceholderText("Enter number of samples S")
-        layout.addWidget(self.s_input)
+        input_layout.addWidget(self.s_input)
 
+        # 좌표 표시용 QLabel
+        self.coord_label = QLabel("Current angle: 0°")
+        input_layout.addWidget(self.coord_label)
+
+        # 8x8 배열창 추가
+        self.distance_win = DistanceWindow()
+        input_layout.addWidget(self.distance_win)
+
+        main_layout.addLayout(input_layout)
+
+        # START 버튼
         self.start_btn = QPushButton("START")
         self.start_btn.clicked.connect(self.start_process)
-        layout.addWidget(self.start_btn)
+        main_layout.addWidget(self.start_btn)
 
+        # 정보/수신 데이터 표시
         self.info_label = QLabel("")
-        layout.addWidget(self.info_label)
-
+        main_layout.addWidget(self.info_label)
         self.received_label = QLabel("Received data:")
-        layout.addWidget(self.received_label)
+        main_layout.addWidget(self.received_label)
 
-        self.setLayout(layout)
+        self.setLayout(main_layout)
 
-        # 하위 윈도우
+        # 3D 그래프
         self.graph_win = GraphWindow()
-        self.distance_win = DistanceWindow()
 
         # UART
-        self.uart_alg = UARTReceiver("/dev/ttyAMA2")  # SC 전송용
-        self.uart_mes = UARTReceiver("/dev/ttyAMA3")  # MeS 전송/수신
+        self.uart_alg = UARTReceiver("/dev/ttyAMA2")  # UART2
+        self.uart_mes = UARTReceiver("/dev/ttyAMA3")
 
         # 상태 변수
         self.S = 0
         self.SC = 0.0
         self.C = 0
         self.transmission_active = False
+        self.wait_for_rf = False
 
         # 타이머
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_loop)
         self.timer.start(50)
 
+    # --------------------------------------------------------
     def start_process(self):
         try:
             self.S = int(self.s_input.text())
@@ -195,6 +208,7 @@ class MainController(QWidget):
         self.SC = 360 / self.S
         self.C = 0
         self.transmission_active = True
+        self.wait_for_rf = False
 
         print(f"=== START ===")
         print(f"S = {self.S}, SC = {self.SC:.3f}°")
@@ -203,7 +217,6 @@ class MainController(QWidget):
         # 첫 SC 전송
         self.send_SC()
         self.graph_win.show()
-        self.distance_win.show()
 
     # SC 전송
     def send_SC(self):
@@ -220,7 +233,15 @@ class MainController(QWidget):
 
     # UART 수신 처리
     def update_loop(self):
-        # Algorism UART
+        if self.wait_for_rf:
+            line_alg = self.uart_alg.read_line()
+            if line_alg:
+                print(f"RX Alg: {line_alg}")
+                if line_alg == "RF":
+                    print("=== RF received, transmission ended ===")
+                    self.wait_for_rf = False
+            return
+
         line_alg = self.uart_alg.read_line()
         if line_alg:
             print(f"RX Alg: {line_alg}")
@@ -232,13 +253,11 @@ class MainController(QWidget):
                 print("MF received, triggering MeS in 2s")
                 QTimer.singleShot(2000, self.send_MeS)
 
-        # MeS UART
         line_mes = self.uart_mes.read_line()
         if line_mes:
             print(f"RX MeS: {line_mes}")
             self.received_label.setText(f"Received data: {line_mes}")
 
-            # 64배열 수신 완료 시 C 증가 + 화면 갱신
             parts = line_mes.split(",")
             if len(parts) == GRID_SIZE**2:
                 dist_list_cm = []
@@ -248,15 +267,11 @@ class MainController(QWidget):
                     except:
                         dist_list_cm.append(None)
 
-                # ★ 현재 샘플의 회전 각도 (도 단위)
-                #   첫 샘플(C=0)은 0도, 다음은 SC, 그 다음은 2*SC, ...
                 current_angle = self.C * self.SC
                 self.graph_win.az_center = current_angle
+                self.coord_label.setText(f"Current angle: {current_angle:.2f}°")
 
-                # ★ 현재 각도 기준으로 8x8 데이터를 3D 좌표로 변환 + 누적 플롯
                 self.graph_win.update_plot(dist_list_cm)
-
-                # 8x8 텍스트 창 업데이트
                 self.distance_win.update_distances(dist_list_cm)
 
                 self.C += 1
@@ -264,12 +279,17 @@ class MainController(QWidget):
 
                 if self.C < self.S:
                     QTimer.singleShot(100, self.send_SC)
-                else:
-                    print("=== All SC transmissions completed ===")
+                elif self.C == self.S:
+                    # RM 신호를 UART2로 전송
+                    self.uart_alg.send("RM")
+                    print("== RM sent to UART2, waiting for RF ==")
                     self.transmission_active = False
+                    self.wait_for_rf = True
 
+    # --------------------------------------------------------
     def start(self):
         self.show()
+
 
 # ============================================================
 # 실행
