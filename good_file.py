@@ -25,43 +25,72 @@ class GraphWindow(QWidget):
         layout = QVBoxLayout()
         layout.addWidget(self.canvas)
         self.setLayout(layout)
-        self.az_center = 0.0
+
+        self.az_center = 0.0                      # 센서 중앙 방위각(터릿 회전 각도)
         self.elevs = [30, 15, 0, -15, -30, -45, -60, -75]
+
+        # ★ 누적 포인트 저장용 리스트
+        self.all_points = []
+
         self.reset_axis()
 
     def reset_axis(self):
         self.ax.cla()
-        self.ax.set_xlim(-10, 10)
-        self.ax.set_ylim(-10, 10)
-        self.ax.set_zlim(-10, 10)
-        self.ax.set_xlabel("X")
-        self.ax.set_ylabel("Y")
-        self.ax.set_zlabel("Z")
+        # 거리 단위가 cm라서 대충 -200~200 정도로 잡음 (원하면 조절 가능)
+        self.ax.set_xlim(-200, 200)
+        self.ax.set_ylim(-200, 200)
+        self.ax.set_zlim(-200, 200)
+        self.ax.set_xlabel("X (cm)")
+        self.ax.set_ylabel("Y (cm)")
+        self.ax.set_zlabel("Z (cm)")
         self.ax.view_init(elev=20, azim=-60)
+        # 3D 비율 맞추기 (정육면체 비율)
+        try:
+            self.ax.set_box_aspect((1, 1, 1))
+        except:
+            pass  # 오래된 matplotlib이면 없어도 동작하게
 
     def update_plot(self, dist_list_cm):
         if len(dist_list_cm) != GRID_SIZE**2:
             return
+
         half_fov = FOV_DEG / 2.0
-        azims = [self.az_center - half_fov + i * FOV_DEG / (GRID_SIZE-1) for i in range(GRID_SIZE)]
-        pts = []
+        azims = [self.az_center - half_fov + i * FOV_DEG / (GRID_SIZE - 1)
+                 for i in range(GRID_SIZE)]
+
+        new_pts = []
+
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):
-                dist = dist_list_cm[r*GRID_SIZE + c]
-                if dist is None:
+                dist = dist_list_cm[r * GRID_SIZE + c]
+                if dist is None or dist <= 0:
                     continue
+
                 az = math.radians(azims[c])
                 el = math.radians(self.elevs[r])
+
+                # 전방(y축), 오른쪽(x축), 위(z축) 기준 좌표
                 x = dist * math.sin(az) * math.cos(el)
                 y = dist * math.cos(az) * math.cos(el)
                 z = dist * math.sin(el)
-                pts.append((x, y, z))
+
+                new_pts.append((x, y, z))
+
+        if not new_pts:
+            return
+
+        # ★ 이번 프레임에서 계산된 포인트들을 누적 리스트에 추가
+        self.all_points.extend(new_pts)
+
+        # ★ 축 초기화 후, 누적된 모든 포인트를 다시 그림
         self.reset_axis()
-        if pts:
-            xs, ys, zs = zip(*pts)
-            self.ax.scatter(xs, ys, zs, c='red', s=50)
-        self.ax.scatter([0], [0], [0], c='blue', s=50)
+
+        xs, ys, zs = zip(*self.all_points)
+        self.ax.scatter(xs, ys, zs, c='red', s=5)      # 누적 거리 포인트
+        self.ax.scatter([0], [0], [0], c='blue', s=30) # 센서 위치
+
         self.canvas.draw()
+
 
 # ============================================================
 # 8×8 거리 표
