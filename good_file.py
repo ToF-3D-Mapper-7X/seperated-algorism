@@ -33,6 +33,7 @@ class GraphWindow(QWidget):
         self.az_center = 0.0
         self.elevs = [30, 15, 0, -15, -30, -45, -60, -75]
         self.all_points = []  # 누적 포인트
+        self.all_quads  = []   # ★ 누적 면(사각형)들
         self.reset_axis()
 
     def reset_axis(self):
@@ -58,7 +59,7 @@ class GraphWindow(QWidget):
                  for i in range(GRID_SIZE)]
 
         new_pts = []
-        # ★ 이번 프레임의 8×8 포인트를 2차원으로 저장
+        # ★ 이번 프레임의 8×8 좌표를 2차원 배열로 저장
         grid_pts = [[None for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
 
         for r in range(GRID_SIZE):
@@ -78,37 +79,48 @@ class GraphWindow(QWidget):
         if not new_pts:
             return
 
-        # 누적 포인트 추가
+        # ★ 점 누적
         self.all_points.extend(new_pts)
 
-        # 축 리셋 후 누적 점 다시 그리기
-        self.reset_axis()
-
-        xs, ys, zs = zip(*self.all_points)
-        self.ax.scatter(xs, ys, zs, c='red', s=2)   # 누적 점
-        self.ax.scatter([0], [0], [0], c='blue', s=30)  # 센서 위치
-
-        # ★ 이번 프레임을 "면"으로 그리기
-        quads = []
+        # ★ 이번 프레임에서 생성된 사각형(면)들을 만든 후, 누적 리스트에 추가
+        new_quads = []
         for r in range(GRID_SIZE - 1):
             for c in range(GRID_SIZE - 1):
                 p00 = grid_pts[r][c]
                 p01 = grid_pts[r][c+1]
                 p10 = grid_pts[r+1][c]
                 p11 = grid_pts[r+1][c+1]
-                # 네 점 중 하나라도 None이면 스킵
+                # 네 점 중 하나라도 None이면 그 면은 스킵
                 if (p00 is None) or (p01 is None) or (p10 is None) or (p11 is None):
                     continue
-                quads.append([p00, p01, p11, p10])
+                # 꼭짓점 순서: 시계/반시계 아무거나 일관되게
+                new_quads.append([p00, p01, p11, p10])
 
-        if quads:
-            poly = Poly3DCollection(quads,
-                                    facecolors='red',
-                                    edgecolors='none',
-                                    alpha=0.3)  # 투명도 조절
-            self.ax.add_collection3d(poly)
+        # ★ 모든 프레임의 면들을 누적
+        self.all_quads.extend(new_quads)
 
-        # 시야축(FOV 중앙 방향) 표시
+        # ==== 다시 그리기 ====
+        self.reset_axis()
+
+        # 1) 누적 점들
+        if self.all_points:
+            xs, ys, zs = zip(*self.all_points)
+            self.ax.scatter(xs, ys, zs, c='red', s=2)
+
+        # 2) 센서 위치
+        self.ax.scatter([0], [0], [0], c='blue', s=30)
+
+        # 3) 누적 면들(모든 프레임)
+        if self.all_quads:
+            surface = Poly3DCollection(
+                self.all_quads,
+                facecolors='red',
+                edgecolors='none',
+                alpha=0.25   # 투명도 (0~1), 필요하면 조절
+            )
+            self.ax.add_collection3d(surface)
+
+        # 4) 시야축(FOV 중앙 방향) 표시
         fov_length = 60
         az = math.radians(self.az_center)
         el = math.radians(0)
