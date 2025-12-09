@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import QTimer
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
 
 GRID_SIZE = 8
 FOV_DEG = 60.0
@@ -56,6 +58,9 @@ class GraphWindow(QWidget):
                  for i in range(GRID_SIZE)]
 
         new_pts = []
+        # ★ 이번 프레임의 8×8 포인트를 2차원으로 저장
+        grid_pts = [[None for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):
                 dist = dist_list_cm[r * GRID_SIZE + c]
@@ -66,17 +71,42 @@ class GraphWindow(QWidget):
                 x = dist * math.sin(az) * math.cos(el)
                 y = dist * math.cos(az) * math.cos(el)
                 z = dist * math.sin(el)
-                new_pts.append((x, y, z))
+                pt = (x, y, z)
+                new_pts.append(pt)
+                grid_pts[r][c] = pt
 
         if not new_pts:
             return
 
+        # 누적 포인트 추가
         self.all_points.extend(new_pts)
+
+        # 축 리셋 후 누적 점 다시 그리기
         self.reset_axis()
 
         xs, ys, zs = zip(*self.all_points)
-        self.ax.scatter(xs, ys, zs, c='red', s=2)  # 점 색상/크기 변경
+        self.ax.scatter(xs, ys, zs, c='red', s=2)   # 누적 점
         self.ax.scatter([0], [0], [0], c='blue', s=30)  # 센서 위치
+
+        # ★ 이번 프레임을 "면"으로 그리기
+        quads = []
+        for r in range(GRID_SIZE - 1):
+            for c in range(GRID_SIZE - 1):
+                p00 = grid_pts[r][c]
+                p01 = grid_pts[r][c+1]
+                p10 = grid_pts[r+1][c]
+                p11 = grid_pts[r+1][c+1]
+                # 네 점 중 하나라도 None이면 스킵
+                if (p00 is None) or (p01 is None) or (p10 is None) or (p11 is None):
+                    continue
+                quads.append([p00, p01, p11, p10])
+
+        if quads:
+            poly = Poly3DCollection(quads,
+                                    facecolors='red',
+                                    edgecolors='none',
+                                    alpha=0.3)  # 투명도 조절
+            self.ax.add_collection3d(poly)
 
         # 시야축(FOV 중앙 방향) 표시
         fov_length = 60
@@ -88,6 +118,7 @@ class GraphWindow(QWidget):
         self.ax.plot([0, x], [0, y], [0, z], c='red', linewidth=2)
 
         self.canvas.draw()
+
 
 
 # ============================================================
