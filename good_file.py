@@ -281,12 +281,12 @@ class MainController(QWidget):
                     QTimer.singleShot(100, self.send_SC)
                 elif self.C == self.S:
                     # RM 신호를 UART2로 전송
-                    self.uart_alg.send("RM")
+                    self.uart_alg.send("RM\n")
                     print("== RM sent to UART2, waiting for RF ==")
                     self.transmission_active = False
                     self.wait_for_rf = True
 
-    # --------------------------------------------------------
+    # --------------------------------------------------------/'
     def start(self):
         self.show()
 
