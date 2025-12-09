@@ -37,9 +37,9 @@ class GraphWindow(QWidget):
     def reset_axis(self):
         self.ax.cla()
         # 거리 단위가 cm라서 대충 -200~200 정도로 잡음 (원하면 조절 가능)
-        self.ax.set_xlim(-200, 200)
-        self.ax.set_ylim(-200, 200)
-        self.ax.set_zlim(-200, 200)
+        self.ax.set_xlim(-50, 50)
+        self.ax.set_ylim(-50, 50)
+        self.ax.set_zlim(-50, 50)
         self.ax.set_xlabel("X (cm)")
         self.ax.set_ylabel("Y (cm)")
         self.ax.set_zlabel("Z (cm)")
